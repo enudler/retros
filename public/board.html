@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Retros</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<!-- ── Name modal ─────────────────────────────────────────────────────── -->
+<div id="name-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h2>👋 Join this board</h2>
+    <p>Enter your name so others know who wrote what.</p>
+    <form id="name-form">
+      <div class="form-group">
+        <label for="display-name">Your name</label>
+        <input id="display-name" type="text" class="input" placeholder="e.g. Alice" maxlength="40" required />
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%">Join board</button>
+      <div id="name-error" class="error-msg hidden"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Board header ────────────────────────────────────────────────────── -->
+<header class="board-header">
+  <span class="board-title" id="board-title">Loading…</span>
+  <span class="spacer"></span>
+  <div class="refresh-dot" title="Auto-refreshing every 20s"></div>
+  <button id="user-pill" class="user-pill" title="Click to change your name">
+    <span>👤</span>
+    <span id="user-name-display">…</span>
+  </button>
+</header>
+
+<!-- ── Board ──────────────────────────────────────────────────────────── -->
+<div id="board-404" class="hidden" style="text-align:center;padding:4rem 1rem;color:var(--c-muted)">
+  <p style="font-size:1.5rem;margin-bottom:.5rem">😕 Board not found</p>
+  <p>Check the link and try again.</p>
+</div>
+
+<div id="board-wrap" class="hidden">
+  <div class="board-columns">
+    <!-- Keep column -->
+    <div class="column" id="col-keep">
+      <div class="column-header col-keep">
+        <span class="col-icon">✅</span>
+        <span>What went well</span>
+        <span class="col-count" id="count-keep">0</span>
+      </div>
+      <div id="items-keep" class="items-list"></div>
+      <button class="add-toggle-btn" data-category="keep">＋ Add item</button>
+      <div id="form-keep" class="add-item-form hidden">
+        <textarea class="textarea" placeholder="What should we keep doing?" rows="3"></textarea>
+        <div class="add-item-actions">
+          <button class="btn btn-ghost btn-sm cancel-add">Cancel</button>
+          <button class="btn btn-primary btn-sm submit-add" data-category="keep">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Improve column -->
+    <div class="column" id="col-improve">
+      <div class="column-header col-improve">
+        <span class="col-icon">🔧</span>
+        <span>To improve</span>
+        <span class="col-count" id="count-improve">0</span>
+      </div>
+      <div id="items-improve" class="items-list"></div>
+      <button class="add-toggle-btn" data-category="improve">＋ Add item</button>
+      <div id="form-improve" class="add-item-form hidden">
+        <textarea class="textarea" placeholder="What can we do better?" rows="3"></textarea>
+        <div class="add-item-actions">
+          <button class="btn btn-ghost btn-sm cancel-add">Cancel</button>
+          <button class="btn btn-primary btn-sm submit-add" data-category="improve">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action items column -->
+    <div class="column" id="col-action">
+      <div class="column-header col-action">
+        <span class="col-icon">⚡</span>
+        <span>Action items</span>
+        <span class="col-count" id="count-action">0</span>
+      </div>
+      <div id="items-action" class="items-list"></div>
+      <button class="add-toggle-btn" data-category="action">＋ Add item</button>
+      <div id="form-action" class="add-item-form hidden">
+        <textarea class="textarea" placeholder="What concrete steps should we take?" rows="3"></textarea>
+        <div class="add-item-actions">
+          <button class="btn btn-ghost btn-sm cancel-add">Cancel</button>
+          <button class="btn btn-primary btn-sm submit-add" data-category="action">Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="/js/board.js"></script>
+</body>
+</html>

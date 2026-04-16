@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Retros</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<!-- ── Setup form ─────────────────────────────────────────────────────── -->
+<div id="view-setup" class="auth-wrap hidden">
+  <div class="auth-box card">
+    <h1>👋 Welcome to Retros</h1>
+    <p class="sub">First-time setup — create your admin password.</p>
+    <form id="setup-form">
+      <div class="form-group">
+        <label for="setup-pw">Admin password</label>
+        <input id="setup-pw" type="password" class="input" placeholder="Min 6 characters" autocomplete="new-password" required />
+      </div>
+      <div class="form-group">
+        <label for="setup-pw2">Confirm password</label>
+        <input id="setup-pw2" type="password" class="input" placeholder="Repeat password" autocomplete="new-password" required />
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%">Set password &amp; continue</button>
+      <div id="setup-error" class="error-msg hidden"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Login form ─────────────────────────────────────────────────────── -->
+<div id="view-login" class="auth-wrap hidden">
+  <div class="auth-box card">
+    <h1>🔐 Admin Login</h1>
+    <p class="sub">Enter your admin password to manage retro boards.</p>
+    <form id="login-form">
+      <div class="form-group">
+        <label for="login-pw">Password</label>
+        <input id="login-pw" type="password" class="input" placeholder="Admin password" autocomplete="current-password" required />
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%">Log in</button>
+      <div id="login-error" class="error-msg hidden"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Dashboard ──────────────────────────────────────────────────────── -->
+<div id="view-dashboard" class="hidden">
+  <header class="site-header">
+    <span class="logo">Retros</span>
+    <span class="spacer"></span>
+    <button id="logout-btn" class="btn btn-ghost btn-sm">Log out</button>
+  </header>
+
+  <main class="dashboard">
+    <h2>📋 Boards</h2>
+
+    <form id="create-form" class="create-board-form">
+      <input id="board-title" type="text" class="input" placeholder="New board title, e.g. Sprint 42 Retro" required />
+      <button type="submit" class="btn btn-primary">+ Create board</button>
+    </form>
+
+    <div class="card" id="boards-container">
+      <div class="empty-state" id="boards-empty">No boards yet. Create your first one above.</div>
+      <table class="boards-table hidden" id="boards-table">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Created</th>
+            <th>Share link</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="boards-tbody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script src="/js/admin.js"></script>
+</body>
+</html>
