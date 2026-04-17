@@ -8,34 +8,35 @@
 </head>
 <body>
 
-<!-- ── Name modal ─────────────────────────────────────────────────────── -->
-<div id="name-modal" class="modal-overlay hidden">
-  <div class="modal-box">
-    <h2>👋 Join this board</h2>
-    <p>Enter your name so others know who wrote what.</p>
-    <form id="name-form">
-      <div class="form-group">
-        <label for="display-name">Your name</label>
-        <input id="display-name" type="text" class="input" placeholder="e.g. Alice" maxlength="40" required />
-      </div>
-      <button type="submit" class="btn btn-primary" style="width:100%">Join board</button>
-      <div id="name-error" class="error-msg hidden"></div>
-    </form>
+<!-- ── Login overlay (shown if not authenticated) ─────────────────────────── -->
+<div id="login-overlay" class="modal-overlay hidden">
+  <div class="modal-box" style="text-align:center">
+    <h2 style="margin-bottom:.5rem">👋 Join this retro</h2>
+    <p style="margin-bottom:1.5rem">Sign in with Google to participate.</p>
+    <a id="google-signin-btn" href="/auth/google" class="btn btn-google" style="justify-content:center">
+      <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+        <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+        <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+      </svg>
+      Sign in with Google
+    </a>
   </div>
 </div>
 
-<!-- ── Board header ────────────────────────────────────────────────────── -->
+<!-- ── Board header ────────────────────────────────────────────────────────── -->
 <header class="board-header">
   <span class="board-title" id="board-title">Loading…</span>
   <span class="spacer"></span>
   <div class="refresh-dot" title="Auto-refreshing every 20s"></div>
-  <button id="user-pill" class="user-pill" title="Click to change your name">
-    <span>👤</span>
+  <div class="user-pill" id="user-pill">
+    <img id="user-avatar" class="user-avatar" src="" alt="" style="display:none" />
     <span id="user-name-display">…</span>
-  </button>
+  </div>
 </header>
 
-<!-- ── Board ──────────────────────────────────────────────────────────── -->
+<!-- ── Board ──────────────────────────────────────────────────────────────── -->
 <div id="board-404" class="hidden" style="text-align:center;padding:4rem 1rem;color:var(--c-muted)">
   <p style="font-size:1.5rem;margin-bottom:.5rem">😕 Board not found</p>
   <p>Check the link and try again.</p>
@@ -43,7 +44,7 @@
 
 <div id="board-wrap" class="hidden">
   <div class="board-columns">
-    <!-- Keep column -->
+
     <div class="column" id="col-keep">
       <div class="column-header col-keep">
         <span class="col-icon">✅</span>
@@ -61,7 +62,6 @@
       </div>
     </div>
 
-    <!-- Improve column -->
     <div class="column" id="col-improve">
       <div class="column-header col-improve">
         <span class="col-icon">🔧</span>
@@ -79,7 +79,6 @@
       </div>
     </div>
 
-    <!-- Action items column -->
     <div class="column" id="col-action">
       <div class="column-header col-action">
         <span class="col-icon">⚡</span>
@@ -96,11 +95,11 @@
         </div>
       </div>
     </div>
+
   </div>
 </div>
 
 <div id="toast"></div>
-
 <script src="/js/board.js"></script>
 </body>
 </html>

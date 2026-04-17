@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 
 function showView(name) {
-  ['setup', 'login', 'dashboard'].forEach(v => {
+  ['login', 'not-admin', 'dashboard'].forEach(v => {
     $(`view-${v}`).classList.toggle('hidden', v !== name);
   });
 }
@@ -16,17 +16,14 @@ function toast(msg, isError = false) {
   toastTimer = setTimeout(() => { el.className = ''; }, 3000);
 }
 
-function showError(elId, msg) {
-  const el = $(elId);
-  el.textContent = msg;
-  el.classList.remove('hidden');
-}
-function clearError(elId) {
-  $(elId).classList.add('hidden');
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 async function api(method, path, body) {
-  const res = await fetch('/api/admin' + path, {
+  const res = await fetch(path, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
@@ -38,52 +35,27 @@ async function api(method, path, body) {
 
 /* ── Init ──────────────────────────────────────────────────────────── */
 async function init() {
-  const { setup, loggedIn } = await api('GET', '/status');
-  if (!setup)      { showView('setup'); return; }
-  if (!loggedIn)   { showView('login'); return; }
+  const { user } = await api('GET', '/api/auth/me');
+  if (!user)          { showView('login');     return; }
+  if (!user.is_admin) { showView('not-admin'); return; }
+
+  // Show user info in header
+  const info = $('admin-user-info');
+  if (user.picture) {
+    const img = document.createElement('img');
+    img.src = user.picture;
+    img.className = 'user-avatar';
+    info.appendChild(img);
+  }
+  info.appendChild(Object.assign(document.createElement('span'), { textContent: user.name }));
+
   showView('dashboard');
   loadBoards();
 }
 
-/* ── Setup ─────────────────────────────────────────────────────────── */
-$('setup-form').addEventListener('submit', async e => {
-  e.preventDefault();
-  clearError('setup-error');
-  const pw  = $('setup-pw').value;
-  const pw2 = $('setup-pw2').value;
-  if (pw !== pw2) { showError('setup-error', 'Passwords do not match'); return; }
-  try {
-    await api('POST', '/setup', { password: pw });
-    showView('dashboard');
-    loadBoards();
-  } catch (err) {
-    showError('setup-error', err.message);
-  }
-});
-
-/* ── Login ─────────────────────────────────────────────────────────── */
-$('login-form').addEventListener('submit', async e => {
-  e.preventDefault();
-  clearError('login-error');
-  try {
-    await api('POST', '/login', { password: $('login-pw').value });
-    showView('dashboard');
-    loadBoards();
-  } catch (err) {
-    showError('login-error', err.message);
-  }
-});
-
-/* ── Logout ────────────────────────────────────────────────────────── */
-$('logout-btn').addEventListener('click', async () => {
-  await api('POST', '/logout');
-  showView('login');
-  $('login-pw').value = '';
-});
-
 /* ── Boards ────────────────────────────────────────────────────────── */
 async function loadBoards() {
-  const boards = await api('GET', '/boards');
+  const boards = await api('GET', '/api/admin/boards');
   renderBoards(boards);
 }
 
@@ -103,15 +75,13 @@ function renderBoards(boards) {
   tbody.innerHTML = '';
 
   boards.forEach(b => {
-    const url = `${location.origin}/board/${b.slug}`;
+    const url  = `${location.origin}/board/${b.slug}`;
     const date = new Date(b.created_at).toLocaleDateString();
-    const tr = document.createElement('tr');
+    const tr   = document.createElement('tr');
     tr.innerHTML = `
       <td><strong>${escHtml(b.title)}</strong></td>
       <td style="color:var(--c-muted);font-size:.82rem">${date}</td>
-      <td class="link-cell">
-        <a href="${url}" target="_blank">/board/${escHtml(b.slug)}</a>
-      </td>
+      <td class="link-cell"><a href="${url}" target="_blank">/board/${escHtml(b.slug)}</a></td>
       <td class="actions-cell">
         <button class="copy-btn" data-url="${url}">Copy link</button>
         <button class="btn btn-danger btn-sm delete-btn" data-id="${b.id}">Delete</button>
@@ -129,7 +99,7 @@ function renderBoards(boards) {
   tbody.querySelectorAll('.delete-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (!confirm('Delete this board and all its items?')) return;
-      await api('DELETE', `/boards/${btn.dataset.id}`);
+      await api('DELETE', `/api/admin/boards/${btn.dataset.id}`);
       toast('Board deleted');
       loadBoards();
     });
@@ -142,7 +112,7 @@ $('create-form').addEventListener('submit', async e => {
   const title = $('board-title').value.trim();
   if (!title) return;
   try {
-    await api('POST', '/boards', { title });
+    await api('POST', '/api/admin/boards', { title });
     $('board-title').value = '';
     toast('Board created!');
     loadBoards();
@@ -150,10 +120,5 @@ $('create-form').addEventListener('submit', async e => {
     toast(err.message, true);
   }
 });
-
-/* ── Utils ─────────────────────────────────────────────────────────── */
-function escHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
 
 init();

@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import './types';
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../data/retro.db');
 
@@ -15,10 +16,14 @@ db.pragma('foreign_keys = ON');
 
 export function initializeDatabase(): void {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS admin (
-      id   INTEGER PRIMARY KEY CHECK(id = 1),
-      password_hash TEXT NOT NULL,
-      created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+    CREATE TABLE IF NOT EXISTS users (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      google_id  TEXT UNIQUE NOT NULL,
+      email      TEXT NOT NULL,
+      name       TEXT NOT NULL,
+      picture    TEXT,
+      is_admin   INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS boards (
@@ -28,20 +33,10 @@ export function initializeDatabase(): void {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
-    CREATE TABLE IF NOT EXISTS board_participants (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id   TEXT NOT NULL,
-      board_id     INTEGER NOT NULL,
-      display_name TEXT NOT NULL,
-      created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(session_id, board_id),
-      FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE
-    );
-
     CREATE TABLE IF NOT EXISTS items (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       board_id   INTEGER NOT NULL,
-      session_id TEXT NOT NULL,
+      user_id    TEXT NOT NULL,
       category   TEXT NOT NULL CHECK(category IN ('keep','improve','action')),
       content    TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -51,27 +46,38 @@ export function initializeDatabase(): void {
     CREATE TABLE IF NOT EXISTS votes (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       item_id    INTEGER NOT NULL,
-      session_id TEXT NOT NULL,
+      user_id    TEXT NOT NULL,
       vote_type  INTEGER NOT NULL CHECK(vote_type IN (1, -1)),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(item_id, session_id),
+      UNIQUE(item_id, user_id),
       FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
     );
   `);
 }
 
-// ── Admin ────────────────────────────────────────────────────────────────────
+// ── Users ────────────────────────────────────────────────────────────────────
 
-export function isAdminSetup(): boolean {
-  return !!(db.prepare('SELECT id FROM admin LIMIT 1').get());
+export function getUserByGoogleId(googleId: string): Express.User | undefined {
+  return db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId) as Express.User | undefined;
 }
 
-export function getAdmin(): { id: number; password_hash: string } | undefined {
-  return db.prepare('SELECT * FROM admin LIMIT 1').get() as any;
-}
-
-export function createAdmin(passwordHash: string): void {
-  db.prepare('INSERT INTO admin (id, password_hash) VALUES (1, ?)').run(passwordHash);
+export function upsertUser(
+  googleId: string,
+  email: string,
+  name: string,
+  picture: string | null,
+  isAdmin: number,
+): Express.User {
+  db.prepare(`
+    INSERT INTO users (google_id, email, name, picture, is_admin)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(google_id) DO UPDATE SET
+      email    = excluded.email,
+      name     = excluded.name,
+      picture  = excluded.picture,
+      is_admin = MAX(is_admin, excluded.is_admin)
+  `).run(googleId, email, name, picture, isAdmin);
+  return getUserByGoogleId(googleId)!;
 }
 
 // ── Boards ───────────────────────────────────────────────────────────────────
@@ -100,37 +106,15 @@ export function deleteBoardById(id: number): void {
   db.prepare('DELETE FROM boards WHERE id = ?').run(id);
 }
 
-// ── Participants ─────────────────────────────────────────────────────────────
-
-export interface Participant {
-  id: number;
-  session_id: string;
-  board_id: number;
-  display_name: string;
-}
-
-export function getParticipant(sessionId: string, boardId: number): Participant | undefined {
-  return db.prepare(
-    'SELECT * FROM board_participants WHERE session_id = ? AND board_id = ?'
-  ).get(sessionId, boardId) as Participant | undefined;
-}
-
-export function upsertParticipant(sessionId: string, boardId: number, displayName: string): void {
-  db.prepare(`
-    INSERT INTO board_participants (session_id, board_id, display_name)
-    VALUES (?, ?, ?)
-    ON CONFLICT(session_id, board_id) DO UPDATE SET display_name = excluded.display_name
-  `).run(sessionId, boardId, displayName);
-}
-
 // ── Items ────────────────────────────────────────────────────────────────────
 
 export interface Item {
   id: number;
   category: 'keep' | 'improve' | 'action';
   content: string;
-  session_id: string;
+  user_id: string;
   author_name: string;
+  author_picture: string | null;
   vote_score: number;
   my_vote: 1 | -1 | null;
   created_at: string;
@@ -138,78 +122,76 @@ export interface Item {
   downvoters: string[];
 }
 
-export function getBoardItems(boardId: number, currentSessionId: string): Item[] {
+export function getBoardItems(boardId: number, currentUserId: string): Item[] {
   const rows = db.prepare(`
     SELECT
       i.id,
       i.category,
       i.content,
-      i.session_id,
+      i.user_id,
       i.created_at,
-      COALESCE(bp.display_name, 'Anonymous') AS author_name,
-      COALESCE(SUM(v.vote_type), 0)           AS vote_score,
-      MAX(CASE WHEN v.session_id = @sid THEN v.vote_type ELSE NULL END) AS my_vote,
+      COALESCE(u.name,    'Unknown') AS author_name,
+      u.picture                      AS author_picture,
+      COALESCE(SUM(v.vote_type), 0)  AS vote_score,
+      MAX(CASE WHEN v.user_id = @uid THEN v.vote_type ELSE NULL END) AS my_vote,
       (
-        SELECT json_group_array(COALESCE(bp2.display_name, 'Anonymous'))
+        SELECT json_group_array(COALESCE(u2.name, 'Unknown'))
         FROM votes v2
-        LEFT JOIN board_participants bp2
-          ON v2.session_id = bp2.session_id AND bp2.board_id = i.board_id
+        LEFT JOIN users u2 ON v2.user_id = u2.google_id
         WHERE v2.item_id = i.id AND v2.vote_type = 1
       ) AS upvoters_json,
       (
-        SELECT json_group_array(COALESCE(bp2.display_name, 'Anonymous'))
+        SELECT json_group_array(COALESCE(u2.name, 'Unknown'))
         FROM votes v2
-        LEFT JOIN board_participants bp2
-          ON v2.session_id = bp2.session_id AND bp2.board_id = i.board_id
+        LEFT JOIN users u2 ON v2.user_id = u2.google_id
         WHERE v2.item_id = i.id AND v2.vote_type = -1
       ) AS downvoters_json
     FROM items i
-    LEFT JOIN board_participants bp
-      ON i.session_id = bp.session_id AND i.board_id = bp.board_id
+    LEFT JOIN users u ON i.user_id = u.google_id
     LEFT JOIN votes v ON i.id = v.item_id
     WHERE i.board_id = @boardId
     GROUP BY i.id
     ORDER BY i.created_at ASC
-  `).all({ sid: currentSessionId, boardId }) as any[];
+  `).all({ uid: currentUserId, boardId }) as any[];
 
   return rows.map(row => ({
     ...row,
-    upvoters:   JSON.parse(row.upvoters_json   ?? '[]') as string[],
-    downvoters: JSON.parse(row.downvoters_json ?? '[]') as string[],
+    upvoters:        JSON.parse(row.upvoters_json   ?? '[]') as string[],
+    downvoters:      JSON.parse(row.downvoters_json ?? '[]') as string[],
     upvoters_json:   undefined,
     downvoters_json: undefined,
   })) as Item[];
 }
 
-export function insertItem(boardId: number, sessionId: string, category: string, content: string): number {
+export function insertItem(boardId: number, userId: string, category: string, content: string): number {
   const result = db.prepare(
-    'INSERT INTO items (board_id, session_id, category, content) VALUES (?, ?, ?, ?)'
-  ).run(boardId, sessionId, category, content);
+    'INSERT INTO items (board_id, user_id, category, content) VALUES (?, ?, ?, ?)'
+  ).run(boardId, userId, category, content);
   return result.lastInsertRowid as number;
 }
 
-export function removeItem(id: number, sessionId: string): number {
-  const result = db.prepare('DELETE FROM items WHERE id = ? AND session_id = ?').run(id, sessionId);
+export function removeItem(id: number, userId: string): number {
+  const result = db.prepare('DELETE FROM items WHERE id = ? AND user_id = ?').run(id, userId);
   return result.changes;
 }
 
 // ── Votes ────────────────────────────────────────────────────────────────────
 
-export function getVote(itemId: number, sessionId: string): { vote_type: number } | undefined {
-  return db.prepare('SELECT vote_type FROM votes WHERE item_id = ? AND session_id = ?')
-    .get(itemId, sessionId) as any;
+export function getVote(itemId: number, userId: string): { vote_type: number } | undefined {
+  return db.prepare('SELECT vote_type FROM votes WHERE item_id = ? AND user_id = ?')
+    .get(itemId, userId) as any;
 }
 
-export function upsertVote(itemId: number, sessionId: string, voteType: number): void {
+export function upsertVote(itemId: number, userId: string, voteType: number): void {
   db.prepare(`
-    INSERT INTO votes (item_id, session_id, vote_type)
+    INSERT INTO votes (item_id, user_id, vote_type)
     VALUES (?, ?, ?)
-    ON CONFLICT(item_id, session_id) DO UPDATE SET vote_type = excluded.vote_type
-  `).run(itemId, sessionId, voteType);
+    ON CONFLICT(item_id, user_id) DO UPDATE SET vote_type = excluded.vote_type
+  `).run(itemId, userId, voteType);
 }
 
-export function removeVote(itemId: number, sessionId: string): void {
-  db.prepare('DELETE FROM votes WHERE item_id = ? AND session_id = ?').run(itemId, sessionId);
+export function removeVote(itemId: number, userId: string): void {
+  db.prepare('DELETE FROM votes WHERE item_id = ? AND user_id = ?').run(itemId, userId);
 }
 
 export default db;

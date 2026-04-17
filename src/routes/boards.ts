@@ -1,8 +1,6 @@
 import { Router, Request, Response } from 'express';
 import {
   getBoardBySlug,
-  getParticipant,
-  upsertParticipant,
   getBoardItems,
   insertItem,
   removeItem,
@@ -10,16 +8,17 @@ import {
   upsertVote,
   removeVote,
 } from '../database';
+import { requireAuth } from '../middleware/adminAuth';
 
 const router = Router();
+router.use(requireAuth);
 
 const VALID_CATEGORIES = new Set(['keep', 'improve', 'action']);
 
 // ── GET /api/boards/:slug/me ─────────────────────────────────────────────────
-// Returns the caller's session id so the frontend can identify its own items.
 
 router.get('/:slug/me', (req: Request, res: Response) => {
-  res.json({ sessionId: req.cookies.session_id as string });
+  res.json({ userId: req.user!.google_id, user: req.user });
 });
 
 // ── GET /api/boards/:slug ────────────────────────────────────────────────────
@@ -28,27 +27,8 @@ router.get('/:slug', (req: Request, res: Response) => {
   const board = getBoardBySlug(req.params.slug);
   if (!board) { res.status(404).json({ error: 'Board not found' }); return; }
 
-  const sid = req.cookies.session_id as string;
-  const participant = getParticipant(sid, board.id) ?? null;
-  const items = getBoardItems(board.id, sid);
-
-  res.json({ board, participant, items });
-});
-
-// ── POST /api/boards/:slug/join ──────────────────────────────────────────────
-
-router.post('/:slug/join', (req: Request, res: Response) => {
-  const board = getBoardBySlug(req.params.slug);
-  if (!board) { res.status(404).json({ error: 'Board not found' }); return; }
-
-  const { displayName } = req.body as { displayName?: string };
-  if (!displayName?.trim()) {
-    res.status(400).json({ error: 'Display name is required' }); return;
-  }
-
-  const sid = req.cookies.session_id as string;
-  upsertParticipant(sid, board.id, displayName.trim());
-  res.json({ success: true, displayName: displayName.trim() });
+  const items = getBoardItems(board.id, req.user!.google_id);
+  res.json({ board, user: req.user, items });
 });
 
 // ── POST /api/boards/:slug/items ─────────────────────────────────────────────
@@ -56,11 +36,6 @@ router.post('/:slug/join', (req: Request, res: Response) => {
 router.post('/:slug/items', (req: Request, res: Response) => {
   const board = getBoardBySlug(req.params.slug);
   if (!board) { res.status(404).json({ error: 'Board not found' }); return; }
-
-  const sid = req.cookies.session_id as string;
-  if (!getParticipant(sid, board.id)) {
-    res.status(403).json({ error: 'Join the board before adding items' }); return;
-  }
 
   const { category, content } = req.body as { category?: string; content?: string };
   if (!category || !VALID_CATEGORIES.has(category)) {
@@ -70,10 +45,9 @@ router.post('/:slug/items', (req: Request, res: Response) => {
     res.status(400).json({ error: 'content is required' }); return;
   }
 
-  const newId = insertItem(board.id, sid, category, content.trim());
-  const items = getBoardItems(board.id, sid);
-  const item = items.find(i => i.id === newId);
-  res.status(201).json(item);
+  const newId = insertItem(board.id, req.user!.google_id, category, content.trim());
+  const items = getBoardItems(board.id, req.user!.google_id);
+  res.status(201).json(items.find(i => i.id === newId));
 });
 
 // ── DELETE /api/boards/:slug/items/:id ───────────────────────────────────────
@@ -82,11 +56,10 @@ router.delete('/:slug/items/:id', (req: Request, res: Response) => {
   const board = getBoardBySlug(req.params.slug);
   if (!board) { res.status(404).json({ error: 'Board not found' }); return; }
 
-  const sid = req.cookies.session_id as string;
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: 'Invalid item id' }); return; }
 
-  const changes = removeItem(id, sid);
+  const changes = removeItem(id, req.user!.google_id);
   if (changes === 0) {
     res.status(403).json({ error: 'Not your item or item not found' }); return;
   }
@@ -94,17 +67,10 @@ router.delete('/:slug/items/:id', (req: Request, res: Response) => {
 });
 
 // ── POST /api/boards/:slug/items/:id/vote ────────────────────────────────────
-// body: { voteType: 1 | -1 }
-// Voting the same direction twice toggles the vote off.
 
 router.post('/:slug/items/:id/vote', (req: Request, res: Response) => {
   const board = getBoardBySlug(req.params.slug);
   if (!board) { res.status(404).json({ error: 'Board not found' }); return; }
-
-  const sid = req.cookies.session_id as string;
-  if (!getParticipant(sid, board.id)) {
-    res.status(403).json({ error: 'Join the board before voting' }); return;
-  }
 
   const { voteType } = req.body as { voteType?: number };
   if (voteType !== 1 && voteType !== -1) {
@@ -114,16 +80,16 @@ router.post('/:slug/items/:id/vote', (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: 'Invalid item id' }); return; }
 
-  const existing = getVote(id, sid);
+  const uid      = req.user!.google_id;
+  const existing = getVote(id, uid);
   if (existing?.vote_type === voteType) {
-    removeVote(id, sid); // toggle off
+    removeVote(id, uid);
   } else {
-    upsertVote(id, sid, voteType); // set or flip
+    upsertVote(id, uid, voteType);
   }
 
-  const items = getBoardItems(board.id, sid);
-  const updated = items.find(i => i.id === id);
-  res.json(updated);
+  const items = getBoardItems(board.id, uid);
+  res.json(items.find(i => i.id === id));
 });
 
 // ── DELETE /api/boards/:slug/items/:id/vote ──────────────────────────────────
@@ -132,14 +98,13 @@ router.delete('/:slug/items/:id/vote', (req: Request, res: Response) => {
   const board = getBoardBySlug(req.params.slug);
   if (!board) { res.status(404).json({ error: 'Board not found' }); return; }
 
-  const sid = req.cookies.session_id as string;
-  const id = parseInt(req.params.id, 10);
+  const id  = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: 'Invalid item id' }); return; }
 
-  removeVote(id, sid);
-  const items = getBoardItems(board.id, sid);
-  const updated = items.find(i => i.id === id);
-  res.json(updated);
+  const uid = req.user!.google_id;
+  removeVote(id, uid);
+  const items = getBoardItems(board.id, uid);
+  res.json(items.find(i => i.id === id));
 });
 
 export default router;
