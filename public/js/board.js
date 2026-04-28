@@ -326,3 +326,8 @@ async function fetchMySessionId() {
 }
 
 fetchMySessionId().then(() => init());
+
+/* ── PDF export ─────────────────────────────────────────────────────── */
+$('export-btn').addEventListener('click', () => {
+  window.location.href = '/api/boards/' + slug + '/export.pdf';
+});
